@@ -1,23 +1,41 @@
-# Agent SOC
+# Agent SOC · Fragnesia Lab
 
-Repositorio para documentar y desarrollar un agente orientado a operaciones de
-seguridad (SOC).
+Prototipo Flask para mostrar un flujo secuencial de tres agentes sobre **CVE-2026-46300 (Fragnesia)**. Presenta dos hosts Debian 12 simulados: uno vulnerable y otro corregido. El agente de inspección muestra inventario y logs; el de contexto cruza un dataset fijo; el de reporte entrega un PDF.
 
-## Objetivo
+> **Demo:** no se conecta a Linux, no ejecuta shell ni PoC, no consulta datasets en vivo y no determina la exposición real de ningún equipo. Host, logs, score y resultados son datos de ejemplo que se repiten en cada ejecución.
 
-Centralizar los avances, decisiones y recursos relacionados con el proyecto.
+## Ejecutar
 
-## Estructura del repositorio
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
 
-- `docs/bitacora.md`: registro de avances y actividades.
-- `LICENSE`: licencia Apache 2.0 del proyecto.
+Abre <http://127.0.0.1:5000>. Elige un host y ejecuta **Inspección → Contexto → Reporte**. Después de la tercera etapa podrás descargar el PDF. Cambiar de escenario o pulsar **Reiniciar flujo** vuelve al inicio.
 
-## Estado
+## Compartir la demo
 
-Proyecto en etapa inicial de definición y documentación.
+Para mostrarla en la misma red local:
 
-## Próximos pasos
+```bash
+export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+gunicorn app:app --bind 0.0.0.0:5000
+```
 
-- Definir el alcance y los requisitos del agente.
-- Documentar la arquitectura propuesta.
-- Registrar los avances en la bitácora.
+Comparte `http://IP_DE_TU_EQUIPO:5000` con tus compañeros. El repositorio incluye `Procfile` para plataformas que aceptan aplicaciones Python con Gunicorn; configura allí `SECRET_KEY` como variable de entorno. Esta demo no incluye cuentas de usuario ni control de acceso.
+
+## Verificación rápida
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## Referencias del caso
+
+- [Debian Security Tracker](https://security-tracker.debian.org/tracker/CVE-2026-46300): en Debian 12, el aviso DSA-6306-1 indica la versión fuente corregida `6.1.174-1`.
+- [Parche netdev](https://lists.openwall.net/netdev/2026/05/13/79): preservación de `SKBFL_SHARED_FRAG` durante la coalescencia de buffers.
+- [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-46300) y [PoC pública](https://github.com/v12-security/pocs/tree/main/fragnesia), mostradas como referencias; la aplicación no las consulta ni ejecuta.
+
+La implementación del proyecto real deberá sustituir los fixtures por una recolección autorizada, normalización de evidencias y consultas verificables a fuentes oficiales.
