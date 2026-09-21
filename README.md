@@ -13,7 +13,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Abre <http://127.0.0.1:5000>. Elige un host y ejecuta **Inspección → Contexto → Reporte**. Después de la tercera etapa podrás descargar el PDF. Cambiar de escenario o pulsar **Reiniciar flujo** vuelve al inicio.
+Abre <http://127.0.0.1:5000>. Elige un host y avanza por pantallas separadas: **Inspección → Contexto → Reporte**. Cada etapa debe ejecutarse antes de que se habilite la siguiente. Puedes volver a revisar una etapa completada. Después de la tercera etapa podrás descargar el PDF. Elegir otro escenario o pulsar **Reiniciar flujo** vuelve al inicio.
 
 ## Compartir la demo
 

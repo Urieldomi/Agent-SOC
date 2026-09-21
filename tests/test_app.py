@@ -31,6 +31,27 @@ class DemoFlowTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(self.client.post('/api/scenario', json={'scenario': 'invalid'}).status_code, 400)
 
+    def test_page_flow_keeps_each_agent_on_its_own_screen(self):
+        self.assertEqual(self.client.get('/etapa/3').location, '/etapa/1')
+        self.assertEqual(self.client.post('/seleccionar', data={'scenario': 'safe'}).location, '/etapa/1')
+        inspection = self.client.get('/etapa/1').get_data(as_text=True)
+        self.assertIn('Ejecutar agente de inspección', inspection)
+        self.assertNotIn('Registro del agente', inspection)
+        self.client.post('/etapa/1/ejecutar')
+        inspection = self.client.get('/etapa/1').get_data(as_text=True)
+        self.assertIn('Registro del agente', inspection)
+        self.assertIn('Continuar a contexto', inspection)
+        self.assertNotIn('Fuentes vinculadas al caso', inspection)
+        self.assertEqual(self.client.get('/etapa/3').location, '/etapa/2')
+        self.client.post('/etapa/2/ejecutar')
+        context = self.client.get('/etapa/2').get_data(as_text=True)
+        self.assertIn('Fuentes vinculadas al caso', context)
+        self.assertIn('Continuar a reporte', context)
+        self.client.post('/etapa/3/ejecutar')
+        report = self.client.get('/etapa/3').get_data(as_text=True)
+        self.assertIn('Descargar reporte PDF', report)
+        self.assertNotIn('Fuentes vinculadas al caso', report)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,57 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agent SOC · Fragnesia Lab</title>
+  <title>Agent SOC | {{ stage_names[current_stage] if page == 'stage' else 'Panel de análisis' }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">◈</span><div><strong>AGENT SOC</strong><small>FRAGNESIA LAB</small></div></div>
-      <div class="side-label">ESPACIO DE TRABAJO</div>
-      <a class="nav-item active" href="#overview"><span>▦</span> Panel de análisis</a>
-      <a class="nav-item" href="#workflow"><span>◇</span> Flujo multiagente</a>
-      <a class="nav-item" href="#evidence"><span>≡</span> Evidencia y logs</a>
-      <div class="sidebar-bottom">
-        <div class="side-status"><span class="pulse"></span> Demo operativa</div>
-        <p>Datos fijos de laboratorio.<br>No inspecciona equipos reales.</p>
-        <span class="version">PROTOTIPO · v0.1</span>
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="{{ url_for('index') }}" class="brand"><span class="brand-symbol">A<span class="brand-rule"></span></span><span><strong>AGENT SOC</strong><small>ANÁLISIS DE EXPOSICIÓN</small></span></a>
+      <div class="header-meta"><span class="case-id">CASO {{ cve }}</span><span class="demo-badge">ENTORNO DE DEMOSTRACIÓN</span></div>
+    </div>
+  </header>
+
+  <main class="page-container">
+    <div class="utility-row"><span>Centro de operaciones <span class="divider">/</span> Caso de estudio <span class="divider">/</span> {{ 'Configuración' if page == 'overview' else stage_names[current_stage] }}</span><span>Debian 12 · Fragnesia</span></div>
+
+    {% if page == 'overview' %}
+      <section class="page-heading"><div><span class="eyebrow">CASO DE ESTUDIO / {{ cve }}</span><h1>Evaluación de exposición</h1><p>Seleccione un sistema de laboratorio para iniciar el análisis secuencial de Fragnesia.</p></div><span class="page-status">PROTOTIPO</span></section>
+    {% else %}
+      <section class="page-heading"><div><span class="eyebrow">ETAPA {{ '%02d'|format(current_stage) }} DE 03 · {{ cve }}</span><h1>{{ stage_names[current_stage] }}</h1><p>{{ 'Recolección de evidencia del sistema y servicio.' if current_stage == 1 else 'Correlación del inventario con el caso de vulnerabilidad.' if current_stage == 2 else 'Consolidación de resultados y documento técnico.' }}</p></div><span class="page-status {{ 'status-done' if payload else '' }}">{{ 'COMPLETADA' if payload else 'PENDIENTE' }}</span></section>
+    {% endif %}
+
+    <nav class="stepper" aria-label="Etapas del análisis">
+      <a class="step-link {{ 'is-current' if page == 'overview' else 'is-complete' }}" href="{{ url_for('index') }}"><span class="step-index">0</span><span><small>INICIO</small><strong>Escenario</strong></span></a>
+      {% for number, name in stage_names.items() %}
+        {% set available = number <= step + 1 %}
+        {% if available %}<a class="step-link {{ 'is-current' if page == 'stage' and current_stage == number else 'is-complete' if number <= step else '' }}" href="{{ url_for('stage_view', stage=number) }}" {% if page == 'stage' and current_stage == number %}aria-current="step"{% endif %}>{% else %}<span class="step-link is-locked" aria-disabled="true">{% endif %}
+          <span class="step-index">{{ number if number > step else '✓' }}</span><span><small>ETAPA {{ '%02d'|format(number) }}</small><strong>{{ name }}</strong></span>
+        {% if available %}</a>{% else %}</span>{% endif %}
+      {% endfor %}
+    </nav>
+
+    <div class="notice"><strong>Simulación controlada.</strong> Los hosts, logs, score y decisiones son datos fijos. Esta aplicación no ejecuta comandos ni consulta sistemas o datasets en vivo.</div>
+
+    {% if page == 'overview' %}
+      <div class="content-heading"><div><span class="section-label">CONFIGURACIÓN DEL CASO</span><h2>Seleccione el host</h2><p>Cada escenario reinicia el flujo para comparar un resultado positivo y uno negativo.</p></div>{% if step > 0 %}<a class="secondary-button" href="{{ url_for('stage_view', stage=step) }}">Volver al análisis</a>{% endif %}</div>
+      <div class="scenario-grid">
+        {% for key, candidate in scenarios.items() %}
+          <form action="{{ url_for('choose_scenario') }}" method="post" class="host-card">
+            <input type="hidden" name="scenario" value="{{ key }}">
+            <div class="host-card-top"><span class="host-code">{{ candidate.host|upper }}</span><span class="host-marker {{ 'marker-risk' if key == 'vulnerable' else 'marker-safe' }}">{{ 'CASO POSITIVO' if key == 'vulnerable' else 'CASO NEGATIVO' }}</span></div>
+            <h3>{{ candidate.label }}</h3><p>Debian GNU/Linux 12 · {{ candidate.service }}</p>
+            <dl><div><dt>Kernel del escenario</dt><dd>{{ candidate.kernel }}</dd></div><div><dt>Paquete fuente</dt><dd>{{ candidate.source_version }}</dd></div></dl>
+            <button type="submit" class="primary-button">Seleccionar e iniciar <span aria-hidden="true">→</span></button>
+          </form>
+        {% endfor %}
       </div>
-    </aside>
+      <section class="brief-card"><div><span class="section-label">FLUJO DE TRABAJO</span><h2>Tres decisiones, una secuencia</h2></div><ol><li><strong>Inspección</strong><span>Inventario del servicio, kernel y módulos.</span></li><li><strong>Contexto</strong><span>Cruce con el dataset fijo y clasificación.</span></li><li><strong>Reporte</strong><span>Síntesis y descarga del PDF.</span></li></ol></section>
+    {% else %}
+      <div class="case-strip"><div><span class="strip-label">HOST SELECCIONADO</span><strong>{{ host.host }}</strong><small>Debian GNU/Linux 12</small></div><div><span class="strip-label">SERVICIO</span><strong>{{ host.service }}</strong><small>Activo · dato simulado</small></div><div><span class="strip-label">KERNEL</span><strong>{{ host.kernel }}</strong><small>Versión en ejecución simulada</small></div><form action="{{ url_for('restart_flow') }}" method="post"><button type="submit" class="plain-button">Reiniciar flujo</button></form></div>
 
-    <main class="main" id="overview">
-      <div class="topbar"><div class="breadcrumb">Workspace <span>/</span> Casos de estudio <span>/</span> <b>Fragnesia</b></div><span class="top-pill">● ENTORNO SIMULADO</span></div>
-      <section class="hero">
-        <div class="hero-copy">
-          <div class="eyebrow"><span class="eyebrow-line"></span> CONSOLA DE INVESTIGACIÓN <span class="eyebrow-line"></span></div>
-          <h1>De la señal al <em>hallazgo.</em></h1>
-          <p>Explora cómo tres agentes colaboran para inspeccionar un host Debian, contextualizar Fragnesia y construir un reporte técnico.</p>
-          <div class="hero-tags"><span>CVE-2026-46300</span><span>DEBIAN 12</span><span>3 AGENTES</span></div>
-        </div>
-        <div class="hero-art" aria-hidden="true"><div class="art-ring outer"></div><div class="art-ring middle"></div><div class="art-ring inner"></div><span class="art-core">◈</span><span class="art-node n1"></span><span class="art-node n2"></span><span class="art-node n3"></span><span class="art-label">ANALYSIS ENGINE</span></div>
-      </section>
-
-      <section class="section-intro"><div><div class="section-kicker">01 / CONFIGURACIÓN</div><h2>Selecciona un escenario</h2><p>El mismo flujo muestra dos resultados de ejemplo. Cambiar de host reinicia las tres etapas.</p></div><span class="demo-note">◉ Todos los datos del host son simulados</span></section>
-      <div class="scenario-grid" id="scenario-grid">
-        <button type="button" class="scenario-card" data-scenario="vulnerable"><span class="card-top"><span class="host-icon">⌘</span><span class="card-check">✓</span></span><strong>Linux vulnerable</strong><span class="host-name">lab-debian-01 · Debian 12</span><span class="scenario-meta"><span class="mini-dot red"></span> Kernel previo al parche <span class="arrow">↗</span></span></button>
-        <button type="button" class="scenario-card" data-scenario="safe"><span class="card-top"><span class="host-icon">⌘</span><span class="card-check">✓</span></span><strong>Linux corregido</strong><span class="host-name">lab-debian-02 · Debian 12</span><span class="scenario-meta"><span class="mini-dot green"></span> Kernel corregido <span class="arrow">↗</span></span></button>
-      </div>
-
-      <section class="workflow-head" id="workflow"><div><div class="section-kicker">02 / ORQUESTACIÓN</div><h2>Flujo de análisis</h2><p>Completa cada etapa para desbloquear la siguiente.</p></div><button type="button" id="reset-button" class="text-button">↺ Reiniciar flujo</button></section>
-      <div class="workflow-grid">
-        <article class="step-card" data-step="1"><div class="step-line"><span class="step-number">01</span><span class="step-state">PENDIENTE</span></div><div class="agent-icon inspection">⌕</div><h3>Inspección</h3><p>Servicio, shell, paquetes, kernel y módulos del host.</p><div class="step-foot"><span>EXTRACCIÓN LINUX</span><button type="button" class="step-button" data-run="1">Iniciar agente <span>→</span></button></div></article>
-        <article class="step-card" data-step="2"><div class="step-line"><span class="step-number">02</span><span class="step-state">BLOQUEADO</span></div><div class="agent-icon context">◈</div><h3>Contexto</h3><p>Cruce con dataset fijo, CVE, impacto y PoC pública.</p><div class="step-foot"><span>CORRELACIÓN</span><button type="button" class="step-button" data-run="2">Iniciar agente <span>→</span></button></div></article>
-        <article class="step-card" data-step="3"><div class="step-line"><span class="step-number">03</span><span class="step-state">BLOQUEADO</span></div><div class="agent-icon report">▤</div><h3>Reporte</h3><p>Síntesis del hallazgo y generación del PDF.</p><div class="step-foot"><span>DOCUMENTACIÓN</span><button type="button" class="step-button" data-run="3">Iniciar agente <span>→</span></button></div></article>
-      </div>
-
-      <section class="results-heading" id="evidence"><div><div class="section-kicker">03 / RESULTADOS</div><h2>Evidencia del caso</h2></div><span id="run-counter">0 DE 3 ETAPAS</span></section>
-      <div id="empty-state" class="empty-state"><div class="empty-symbol">⌁</div><strong>El análisis está listo para comenzar</strong><p>Selecciona un host y ejecuta el agente de inspección para ver evidencia, logs y decisiones.</p></div>
-      <div id="results" class="results" aria-live="polite"></div>
-      <div id="report-action" class="report-action" hidden><div><span class="report-icon">↓</span><div><strong>Reporte de laboratorio listo</strong><p>PDF con evidencia, clasificación y fuentes de referencia.</p></div></div><a class="download-button" href="/report.pdf">Descargar PDF <span>↗</span></a></div>
-      <footer>Agent SOC · Demostración conceptual · Sin conexión a hosts, SIEM ni datasets en vivo.</footer>
-    </main>
-  </div>
-  <script>window.INITIAL_STATE = {{ initial_state | tojson }};</script>
-  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+      {% if not payload %}
+        <section class="pending-card"><span class="pending-number">{{ '%02d'|format(current_stage) }}</span><div><span class="section-label">LISTO PARA EJECUTAR</span><h2>{{ 'Iniciar inspección del host' if current_stage == 1 else 'Iniciar análisis de contexto' if current_stage == 2 else 'Generar reporte técnico' }}</h2><p>{{ 'El agente mostrará servicio, kernel, paquete, módulo y registros de ejemplo.' if current_stage == 1 else 'El agente comparará la evidencia anterior con un dataset fijo de Fragnesia.' if current_stage == 2 else 'El agente consolidará la evidencia de las dos etapas previas y habilitará el PDF.' }}</p><form action="{{ url_for('execute_stage', stage=current_stage) }}" method="post"><button type="submit" class="primary-button">{{ 'Ejecutar agente de inspección' if current_stage == 1 else 'Ejecutar agente de contexto' if current_stage == 2 else 'Generar reporte' }} <span aria-hidden="true">→</span></button></form></div></section>
+        <div class="locked-note">Complete esta etapa para habilitar {{ 'Contexto' if current_stage == 1 else 'Reporte' if current_stage == 2 else 'la descarga del PDF' }}.</div>
+      {% else %}
+        <div class="result-banner {{ 'risk' if current_stage > 1 and host.tone == 'danger' else 'safe' if current_stage > 1 else '' }}"><div><span class="result-check">✓</span><div><strong>{{ payload.status }}</strong><p>{{ payload.summary }}</p></div></div>{% if current_stage > 1 %}<span class="decision-tag {{ host.tone }}">{{ host.decision }}</span>{% endif %}</div>
+        <div class="detail-grid"><section class="data-panel"><div class="panel-heading"><span class="section-label">EVIDENCIA ESTRUCTURADA</span><h2>{{ 'Inventario del host' if current_stage == 1 else 'Evaluación de contexto' if current_stage == 2 else 'Síntesis del reporte' }}</h2></div><table><tbody>{% for label, value in payload.facts %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table></section><section class="log-panel"><div class="panel-heading"><span class="section-label">TRAZABILIDAD</span><h2>Registro del agente</h2></div><div class="log-list">{% for line in payload.logs %}<div>{{ line }}</div>{% endfor %}</div><p>Registro estático de demostración. No proviene de journalctl ni de un SIEM.</p></section></div>
+        {% if payload.finding %}<section class="finding-panel"><span class="section-label">INTERPRETACIÓN DEL CASO</span><h2>{{ 'Conclusión de contexto' if current_stage == 2 else 'Conclusión del reporte' }}</h2><p>{{ payload.finding }}</p>{% if current_stage == 3 %}<strong>Acción sugerida</strong><p>{{ host.recommendation }}</p>{% endif %}</section>{% endif %}
+        {% if current_stage == 2 %}<section class="references"><span class="section-label">REFERENCIAS TÉCNICAS</span><h2>Fuentes vinculadas al caso</h2><p>Se muestran como referencias. El prototipo no realiza consultas en vivo.</p><div class="reference-list">{% for source in payload.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div></section>{% endif %}
+        <div class="action-bar"><div><span class="section-label">ETAPA {{ '%02d'|format(current_stage) }} COMPLETADA</span><p>{{ 'Revise la evidencia antes de continuar.' if current_stage < 3 else 'La evaluación simulada concluyó.' }}</p></div>{% if current_stage < 3 %}<a class="primary-button" href="{{ url_for('stage_view', stage=current_stage + 1) }}">Continuar a {{ stage_names[current_stage + 1]|lower }} <span aria-hidden="true">→</span></a>{% else %}<a class="primary-button" href="{{ url_for('report_pdf') }}">Descargar reporte PDF <span aria-hidden="true">↓</span></a>{% endif %}</div>
+      {% endif %}
+    {% endif %}
+    <footer>Agent SOC · Prototipo de validación conceptual · CVE-2026-46300</footer>
+  </main>
 </body>
 </html>

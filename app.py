@@ -6,7 +6,7 @@ from io import BytesIO
 import os
 import secrets
 
-from flask import Flask, jsonify, render_template, request, send_file, session
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, session, url_for
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
@@ -19,6 +19,7 @@ app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 CVE = "CVE-2026-46300"
+STAGE_NAMES = {1: "Inspección", 2: "Contexto", 3: "Reporte"}
 SOURCES = [
     {"name": "Debian Security Tracker", "url": "https://security-tracker.debian.org/tracker/CVE-2026-46300", "detail": "Estado de paquetes y aviso DSA-6306-1"},
     {"name": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-46300", "detail": "Ficha de la vulnerabilidad"},
@@ -125,7 +126,51 @@ def snapshot():
 
 @app.get("/")
 def index():
-    return render_template("index.html", initial_state=snapshot(), cve=CVE)
+    scenario, step = current_state()
+    return render_template(
+        "index.html", page="overview", scenario=scenario, step=step,
+        host=SCENARIOS[scenario], scenarios=SCENARIOS, stage_names=STAGE_NAMES, cve=CVE,
+    )
+
+
+@app.get("/etapa/<int:stage>")
+def stage_view(stage):
+    if stage not in STAGE_NAMES:
+        abort(404)
+    scenario, completed_step = current_state()
+    if stage > completed_step + 1:
+        return redirect(url_for("stage_view", stage=completed_step + 1))
+    return render_template(
+        "index.html", page="stage", scenario=scenario, step=completed_step,
+        current_stage=stage, stage_names=STAGE_NAMES, host=SCENARIOS[scenario],
+        payload=stage_payload(stage, scenario) if stage <= completed_step else None,
+        cve=CVE,
+    )
+
+
+@app.post("/seleccionar")
+def choose_scenario():
+    scenario = request.form.get("scenario")
+    if scenario not in SCENARIOS:
+        abort(400)
+    session["scenario"] = scenario
+    session["step"] = 0
+    return redirect(url_for("stage_view", stage=1))
+
+
+@app.post("/etapa/<int:stage>/ejecutar")
+def execute_stage(stage):
+    _, completed_step = current_state()
+    if stage not in STAGE_NAMES or stage != completed_step + 1:
+        return redirect(url_for("stage_view", stage=min(completed_step + 1, 3)))
+    session["step"] = stage
+    return redirect(url_for("stage_view", stage=stage))
+
+
+@app.post("/reiniciar")
+def restart_flow():
+    session["step"] = 0
+    return redirect(url_for("index"))
 
 
 @app.get("/api/state")
