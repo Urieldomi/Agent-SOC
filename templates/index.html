@@ -3,67 +3,109 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agent SOC | {{ stage_names[current_stage] if page == 'stage' else 'Panel de análisis' }}</title>
+  <title>Agent SOC | {{ stage_names[current_stage] if page == 'stage' else 'Servidor local' }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <a href="{{ url_for('index') }}" class="brand"><span class="brand-symbol">A<span class="brand-rule"></span></span><span><strong>AGENT SOC</strong><small>ANÁLISIS DE EXPOSICIÓN</small></span></a>
-      <div class="header-meta"><span class="case-id">CASO {{ cve }}</span><span class="demo-badge">ENTORNO DE DEMOSTRACIÓN</span></div>
+      <a href="{{ url_for('index') }}" class="brand">
+        <span class="brand-symbol" aria-hidden="true">A<span class="brand-rule"></span></span>
+        <span><strong>AGENT SOC</strong><small>ANÁLISIS DE EXPOSICIÓN</small></span>
+      </a>
+      <div class="header-meta">
+        <span class="case-id">CASO {{ cve }}</span>
+        <span class="live-badge"><span aria-hidden="true"></span> ENTORNO DE DEMOSTRACIÓN</span>
+      </div>
     </div>
   </header>
 
   <main class="page-container">
-    <div class="utility-row"><span>Centro de operaciones <span class="divider">/</span> Caso de estudio <span class="divider">/</span> {{ 'Configuración' if page == 'overview' else stage_names[current_stage] }}</span><span>Debian 12 · Fragnesia</span></div>
+    <div class="utility-row">
+      <span>Centro de operaciones <span class="divider">/</span> {{ 'Selección del servidor' if page == 'overview' else stage_names[current_stage] }}</span>
+      <span>Evaluación de exposición</span>
+    </div>
 
     {% if page == 'overview' %}
-      <section class="page-heading"><div><span class="eyebrow">CASO DE ESTUDIO / {{ cve }}</span><h1>Evaluación de exposición</h1><p>Seleccione un sistema de laboratorio para iniciar el análisis secuencial de Fragnesia.</p></div><span class="page-status">PROTOTIPO</span></section>
+      <section class="page-heading">
+        <div><span class="eyebrow">PASO 00 · SERVIDOR OBJETIVO</span><h1>Servidor actual detectado</h1><p>Seleccione el equipo donde se está ejecutando Agent SOC para iniciar el flujo completo.</p></div>
+        <form action="{{ url_for('refresh_inventory') }}" method="post"><button class="secondary-button" type="submit">Actualizar inventario</button></form>
+      </section>
     {% else %}
-      <section class="page-heading"><div><span class="eyebrow">ETAPA {{ '%02d'|format(current_stage) }} DE 03 · {{ cve }}</span><h1>{{ stage_names[current_stage] }}</h1><p>{{ 'Recolección de evidencia del sistema y servicio.' if current_stage == 1 else 'Correlación del inventario con el caso de vulnerabilidad.' if current_stage == 2 else 'Consolidación de resultados y documento técnico.' }}</p></div><span class="page-status {{ 'status-done' if payload else '' }}">{{ 'COMPLETADA' if payload else 'PENDIENTE' }}</span></section>
+      <section class="page-heading">
+        <div><span class="eyebrow">ETAPA {{ '%02d'|format(current_stage) }} DE 03 · {{ cve }}</span><h1>{{ stage_names[current_stage] }}</h1><p>{{ 'Inventario del servidor seleccionado.' if current_stage == 1 else 'Correlación con el caso Fragnesia.' if current_stage == 2 else 'Consolidación del análisis y documento técnico.' }}</p></div>
+        <span class="page-status {{ 'status-done' if payload else '' }}">{{ 'COMPLETADA' if payload else 'PENDIENTE' }}</span>
+      </section>
     {% endif %}
 
     <nav class="stepper" aria-label="Etapas del análisis">
-      <a class="step-link {{ 'is-current' if page == 'overview' else 'is-complete' }}" href="{{ url_for('index') }}"><span class="step-index">0</span><span><small>INICIO</small><strong>Escenario</strong></span></a>
+      <a class="step-link {{ 'is-current' if page == 'overview' else 'is-complete' }}" href="{{ url_for('index') }}">
+        <span class="step-index">{{ '✓' if selected else '0' }}</span><span><small>INICIO</small><strong>Servidor</strong></span>
+      </a>
       {% for number, name in stage_names.items() %}
-        {% set available = number <= step + 1 %}
+        {% set available = selected and number <= step + 1 %}
         {% if available %}<a class="step-link {{ 'is-current' if page == 'stage' and current_stage == number else 'is-complete' if number <= step else '' }}" href="{{ url_for('stage_view', stage=number) }}" {% if page == 'stage' and current_stage == number %}aria-current="step"{% endif %}>{% else %}<span class="step-link is-locked" aria-disabled="true">{% endif %}
-          <span class="step-index">{{ number if number > step else '✓' }}</span><span><small>ETAPA {{ '%02d'|format(number) }}</small><strong>{{ name }}</strong></span>
+          <span class="step-index">{{ '✓' if number <= step else number }}</span><span><small>ETAPA {{ '%02d'|format(number) }}</small><strong>{{ name }}</strong></span>
         {% if available %}</a>{% else %}</span>{% endif %}
       {% endfor %}
     </nav>
 
-    <div class="notice"><strong>Simulación controlada.</strong> Los hosts, logs, score y decisiones son datos fijos. Esta aplicación no ejecuta comandos ni consulta sistemas o datasets en vivo.</div>
-
     {% if page == 'overview' %}
-      <div class="content-heading"><div><span class="section-label">CONFIGURACIÓN DEL CASO</span><h2>Seleccione el host</h2><p>Cada escenario reinicia el flujo para comparar un resultado positivo y uno negativo.</p></div>{% if step > 0 %}<a class="secondary-button" href="{{ url_for('stage_view', stage=step) }}">Volver al análisis</a>{% endif %}</div>
-      <div class="scenario-grid">
-        {% for key, candidate in scenarios.items() %}
-          <form action="{{ url_for('choose_scenario') }}" method="post" class="host-card">
-            <input type="hidden" name="scenario" value="{{ key }}">
-            <div class="host-card-top"><span class="host-code">{{ candidate.host|upper }}</span><span class="host-marker {{ 'marker-risk' if key == 'vulnerable' else 'marker-safe' }}">{{ 'CASO POSITIVO' if key == 'vulnerable' else 'CASO NEGATIVO' }}</span></div>
-            <h3>{{ candidate.label }}</h3><p>Debian GNU/Linux 12 · {{ candidate.service }}</p>
-            <dl><div><dt>Kernel del escenario</dt><dd>{{ candidate.kernel }}</dd></div><div><dt>Paquete fuente</dt><dd>{{ candidate.source_version }}</dd></div></dl>
-            <button type="submit" class="primary-button">Seleccionar e iniciar <span aria-hidden="true">→</span></button>
-          </form>
-        {% endfor %}
-      </div>
-      <section class="brief-card"><div><span class="section-label">FLUJO DE TRABAJO</span><h2>Tres decisiones, una secuencia</h2></div><ol><li><strong>Inspección</strong><span>Inventario del servicio, kernel y módulos.</span></li><li><strong>Contexto</strong><span>Cruce con el dataset fijo y clasificación.</span></li><li><strong>Reporte</strong><span>Síntesis y descarga del PDF.</span></li></ol></section>
+      <section class="identity-card">
+        <div><span class="section-label">SERVIDOR LOCAL DISPONIBLE</span><h2>{{ inventory.hostname }}</h2><p>{{ inventory.fqdn }}</p></div>
+        <div class="identity-meta"><span>{{ inventory.operating_system.pretty_name }}</span><strong>{{ inventory.default_gateway.source_address or 'IP no detectada' }}</strong><small>Recolectado {{ inventory.collected_at }}</small></div>
+      </section>
+
+      <section class="metric-grid" aria-label="Resumen de recursos">
+        <article class="metric-card"><span>Sistema operativo</span><strong>{{ inventory.operating_system.name }}</strong><small>Versión {{ inventory.operating_system.version_id }}</small></article>
+        <article class="metric-card"><span>Kernel real</span><strong>{{ inventory.kernel.release }}</strong><small>{{ inventory.kernel.architecture }}</small></article>
+        <article class="metric-card"><span>Memoria RAM</span><strong>{{ inventory.memory.total_bytes|bytes }}</strong><small>{{ inventory.memory.used_percent }} % en uso</small></article>
+        <article class="metric-card"><span>Dirección principal</span><strong>{{ inventory.default_gateway.source_address or 'No detectada' }}</strong><small>{{ inventory.default_gateway.interface or 'Sin interfaz principal' }}</small></article>
+      </section>
+
+      <section class="selection-panel">
+        <div><span class="section-label">OBJETIVO DEL ANÁLISIS</span><h2>Usar este servidor</h2><p>Inicie la evaluación secuencial del servidor detectado.</p></div>
+        <form action="{{ url_for('select_local_server') }}" method="post"><button class="primary-button" type="submit">Seleccionar y continuar <span aria-hidden="true">→</span></button></form>
+      </section>
+
+      {% if selected %}<div class="resume-row"><a class="secondary-button" href="{{ url_for('stage_view', stage=step if step > 0 else 1) }}">Volver al análisis actual</a></div>{% endif %}
     {% else %}
-      <div class="case-strip"><div><span class="strip-label">HOST SELECCIONADO</span><strong>{{ host.host }}</strong><small>Debian GNU/Linux 12</small></div><div><span class="strip-label">SERVICIO</span><strong>{{ host.service }}</strong><small>Activo · dato simulado</small></div><div><span class="strip-label">KERNEL</span><strong>{{ host.kernel }}</strong><small>Versión en ejecución simulada</small></div><form action="{{ url_for('restart_flow') }}" method="post"><button type="submit" class="plain-button">Reiniciar flujo</button></form></div>
+      <div class="case-strip">
+        <div><span class="strip-label">HOST SELECCIONADO</span><strong>{{ inventory.hostname }}</strong><small>{{ inventory.operating_system.pretty_name }}</small></div>
+        <div><span class="strip-label">IP PRINCIPAL</span><strong>{{ inventory.default_gateway.source_address or 'No detectada' }}</strong><small>Dato real del inventario</small></div>
+        <div><span class="strip-label">KERNEL ACTIVO</span><strong>{{ inventory.kernel.release }}</strong><small>Dato real del sistema</small></div>
+        <form action="{{ url_for('restart_flow') }}" method="post"><button type="submit" class="plain-button">Cambiar servidor</button></form>
+      </div>
 
       {% if not payload %}
-        <section class="pending-card"><span class="pending-number">{{ '%02d'|format(current_stage) }}</span><div><span class="section-label">LISTO PARA EJECUTAR</span><h2>{{ 'Iniciar inspección del host' if current_stage == 1 else 'Iniciar análisis de contexto' if current_stage == 2 else 'Generar reporte técnico' }}</h2><p>{{ 'El agente mostrará servicio, kernel, paquete, módulo y registros de ejemplo.' if current_stage == 1 else 'El agente comparará la evidencia anterior con un dataset fijo de Fragnesia.' if current_stage == 2 else 'El agente consolidará la evidencia de las dos etapas previas y habilitará el PDF.' }}</p><form action="{{ url_for('execute_stage', stage=current_stage) }}" method="post"><button type="submit" class="primary-button">{{ 'Ejecutar agente de inspección' if current_stage == 1 else 'Ejecutar agente de contexto' if current_stage == 2 else 'Generar reporte' }} <span aria-hidden="true">→</span></button></form></div></section>
-        <div class="locked-note">Complete esta etapa para habilitar {{ 'Contexto' if current_stage == 1 else 'Reporte' if current_stage == 2 else 'la descarga del PDF' }}.</div>
+        <section class="pending-card">
+          <span class="pending-number">{{ '%02d'|format(current_stage) }}</span>
+          <div>
+            <span class="section-label">LISTO PARA EJECUTAR</span>
+            <h2>{{ 'Iniciar inspección del host' if current_stage == 1 else 'Iniciar análisis de contexto' if current_stage == 2 else 'Generar reporte técnico' }}</h2>
+            <p>{{ 'Se utilizará el inventario recolectado del servidor seleccionado.' if current_stage == 1 else 'Se procesará el caso de estudio de Fragnesia.' }}</p>
+            <form action="{{ url_for('execute_stage', stage=current_stage) }}" method="post"><button type="submit" class="primary-button">{{ 'Ejecutar agente de inspección' if current_stage == 1 else 'Ejecutar agente de contexto' if current_stage == 2 else 'Generar reporte' }} <span aria-hidden="true">→</span></button></form>
+          </div>
+        </section>
       {% else %}
-        <div class="result-banner {{ 'risk' if current_stage > 1 and host.tone == 'danger' else 'safe' if current_stage > 1 else '' }}"><div><span class="result-check">✓</span><div><strong>{{ payload.status }}</strong><p>{{ payload.summary }}</p></div></div>{% if current_stage > 1 %}<span class="decision-tag {{ host.tone }}">{{ host.decision }}</span>{% endif %}</div>
-        <div class="detail-grid"><section class="data-panel"><div class="panel-heading"><span class="section-label">EVIDENCIA ESTRUCTURADA</span><h2>{{ 'Inventario del host' if current_stage == 1 else 'Evaluación de contexto' if current_stage == 2 else 'Síntesis del reporte' }}</h2></div><table><tbody>{% for label, value in payload.facts %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table></section><section class="log-panel"><div class="panel-heading"><span class="section-label">TRAZABILIDAD</span><h2>Registro del agente</h2></div><div class="log-list">{% for line in payload.logs %}<div>{{ line }}</div>{% endfor %}</div><p>Registro estático de demostración. No proviene de journalctl ni de un SIEM.</p></section></div>
-        {% if payload.finding %}<section class="finding-panel"><span class="section-label">INTERPRETACIÓN DEL CASO</span><h2>{{ 'Conclusión de contexto' if current_stage == 2 else 'Conclusión del reporte' }}</h2><p>{{ payload.finding }}</p>{% if current_stage == 3 %}<strong>Acción sugerida</strong><p>{{ host.recommendation }}</p>{% endif %}</section>{% endif %}
-        {% if current_stage == 2 %}<section class="references"><span class="section-label">REFERENCIAS TÉCNICAS</span><h2>Fuentes vinculadas al caso</h2><p>Se muestran como referencias. El prototipo no realiza consultas en vivo.</p><div class="reference-list">{% for source in payload.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div></section>{% endif %}
-        <div class="action-bar"><div><span class="section-label">ETAPA {{ '%02d'|format(current_stage) }} COMPLETADA</span><p>{{ 'Revise la evidencia antes de continuar.' if current_stage < 3 else 'La evaluación simulada concluyó.' }}</p></div>{% if current_stage < 3 %}<a class="primary-button" href="{{ url_for('stage_view', stage=current_stage + 1) }}">Continuar a {{ stage_names[current_stage + 1]|lower }} <span aria-hidden="true">→</span></a>{% else %}<a class="primary-button" href="{{ url_for('report_pdf') }}">Descargar reporte PDF <span aria-hidden="true">↓</span></a>{% endif %}</div>
+        <div class="result-banner">
+          <div><span class="result-check">✓</span><div><strong>{{ payload.status }}</strong><p>{{ payload.summary }}</p></div></div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="data-panel"><div class="panel-heading"><span class="section-label">EVIDENCIA ESTRUCTURADA</span><h2>{{ 'Inventario del host' if current_stage == 1 else 'Evaluación de contexto' if current_stage == 2 else 'Síntesis del reporte' }}</h2></div><table><tbody>{% for label, value in payload.facts %}<tr><th scope="row">{{ label }}</th><td>{{ value|bytes if label == 'RAM total' else value }}</td></tr>{% endfor %}</tbody></table></section>
+          <section class="log-panel"><div class="panel-heading"><span class="section-label">TRAZABILIDAD</span><h2>Registro de la etapa</h2></div><div class="log-list">{% for line in payload.logs %}<div>{{ line }}</div>{% endfor %}</div><p>Registro técnico de la ejecución.</p></section>
+        </div>
+
+        {% if payload.finding %}<section class="finding-panel"><span class="section-label">INTERPRETACIÓN DEL CASO</span><h2>{{ 'Conclusión de contexto' if current_stage == 2 else 'Conclusión del reporte' }}</h2><p>{{ payload.finding }}</p>{% if current_stage == 3 %}<strong>Acción sugerida</strong><p>{{ mock_assessment.recommendation }}</p>{% endif %}</section>{% endif %}
+
+        {% if current_stage == 2 %}<section class="references"><span class="section-label">REFERENCIAS TÉCNICAS</span><h2>Fuentes vinculadas al caso</h2><div class="reference-list">{% for source in payload.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div></section>{% endif %}
+
+        <div class="action-bar"><div><span class="section-label">ETAPA {{ '%02d'|format(current_stage) }} COMPLETADA</span><p>{{ 'Revise los resultados antes de continuar.' if current_stage < 3 else 'Evaluación finalizada.' }}</p></div>{% if current_stage < 3 %}<a class="primary-button" href="{{ url_for('stage_view', stage=current_stage + 1) }}">Continuar a {{ stage_names[current_stage + 1]|lower }} <span aria-hidden="true">→</span></a>{% else %}<a class="primary-button" href="{{ url_for('report_pdf') }}">Descargar reporte PDF <span aria-hidden="true">↓</span></a>{% endif %}</div>
       {% endif %}
     {% endif %}
-    <footer>Agent SOC · Prototipo de validación conceptual · CVE-2026-46300</footer>
+
+    <footer>Agent SOC · Evaluación de exposición · {{ cve }}</footer>
   </main>
 </body>
 </html>

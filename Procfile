@@ -1,1 +1,1 @@
-web: gunicorn app:app --bind 0.0.0.0:$PORT
+web: gunicorn app:app --bind ${HOST:-127.0.0.1}:$PORT

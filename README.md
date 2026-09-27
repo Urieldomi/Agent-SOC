@@ -1,8 +1,39 @@
-# Agent SOC · Fragnesia Lab
+# Agent SOC
 
-Prototipo Flask para mostrar un flujo secuencial de tres agentes sobre **CVE-2026-46300 (Fragnesia)**. Presenta dos hosts Debian 12 simulados: uno vulnerable y otro corregido. El agente de inspección muestra inventario y logs; el de contexto cruza un dataset fijo; el de reporte entrega un PDF.
+Agent SOC está evolucionando de una demostración con datos fijos a un sistema real y modular para inspeccionar servidores Linux, correlacionar evidencia con fuentes de vulnerabilidades y producir reportes verificables.
 
-> **Demo:** no se conecta a Linux, no ejecuta shell ni PoC, no consulta datasets en vivo y no determina la exposición real de ningún equipo. Host, logs, score y resultados son datos de ejemplo que se repiten en cada ejecución.
+## Feature disponible: inventario local real
+
+La aplicación detecta automáticamente el servidor donde está instalada y obtiene, mediante operaciones de solo lectura:
+
+- hostname y FQDN;
+- distribución, versión, kernel y arquitectura;
+- fabricante, modelo y procesador;
+- CPU, RAM, swap y disco raíz;
+- tiempo de actividad y último arranque;
+- gateway, dirección IP e interfaces de red;
+- traza de los comandos de inventario ejecutados.
+
+La evaluación real de CVE-2026-46300 todavía no se ejecuta. Para mantener funcional el producto completo, el inventario real alimenta las etapas existentes de contexto y reporte, que continúan como mocks claramente etiquetados.
+
+Flujo disponible:
+
+1. Detectar y seleccionar el servidor local real.
+2. Ejecutar la inspección con datos reales.
+3. Ejecutar el contexto simulado de Fragnesia.
+4. Generar un reporte PDF transicional con inventario real y evaluación simulada.
+
+## Arquitectura
+
+El código de inventario está aislado de Flask:
+
+- `agent_soc/inventory/command_runner.py`: ejecutor con lista cerrada de comandos.
+- `agent_soc/inventory/collector.py`: recolección y normalización de datos.
+- `agent_soc/inventory/models.py`: contrato del snapshot de inventario.
+- `agent_soc/inventory/service.py`: caché y actualización explícita.
+- `app.py`: composición y rutas HTTP.
+
+Consulta [docs/architecture.md](docs/architecture.md) para ver el diagrama, las decisiones y el contrato de seguridad.
 
 ## Ejecutar
 
@@ -13,29 +44,31 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Abre <http://127.0.0.1:5000>. Elige un host y avanza por pantallas separadas: **Inspección → Contexto → Reporte**. Cada etapa debe ejecutarse antes de que se habilite la siguiente. Puedes volver a revisar una etapa completada. Después de la tercera etapa podrás descargar el PDF. Elegir otro escenario o pulsar **Reiniciar flujo** vuelve al inicio.
+Abre <http://127.0.0.1:5000>. La aplicación escucha solamente en loopback de forma predeterminada porque el inventario contiene información sensible de infraestructura.
 
-## Compartir la demo
+Endpoints disponibles:
 
-Para mostrarla en la misma red local:
+- `GET /`: interfaz del inventario.
+- `POST /inventario/actualizar`: fuerza una nueva recolección.
+- `GET /api/inventory`: snapshot normalizado en JSON.
+- `GET /etapa/<n>`: navegación secuencial de inspección, contexto y reporte.
+- `POST /etapa/<n>/ejecutar`: ejecución de la siguiente etapa habilitada.
+- `GET /api/state`: estado completo del flujo híbrido.
+- `GET /report.pdf`: reporte disponible después de las tres etapas.
+- `GET /health`: estado básico del servicio.
 
-```bash
-export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-gunicorn app:app --bind 0.0.0.0:5000
-```
-
-Comparte `http://IP_DE_TU_EQUIPO:5000` con tus compañeros. El repositorio incluye `Procfile` para plataformas que aceptan aplicaciones Python con Gunicorn; configura allí `SECRET_KEY` como variable de entorno. Esta demo no incluye cuentas de usuario ni control de acceso.
-
-## Verificación rápida
+## Pruebas
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-## Referencias del caso
+## Límites de seguridad
 
-- [Debian Security Tracker](https://security-tracker.debian.org/tracker/CVE-2026-46300): en Debian 12, el aviso DSA-6306-1 indica la versión fuente corregida `6.1.174-1`.
-- [Parche netdev](https://lists.openwall.net/netdev/2026/05/13/79): preservación de `SKBFL_SHARED_FRAG` durante la coalescencia de buffers.
-- [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-46300) y [PoC pública](https://github.com/v12-security/pocs/tree/main/fragnesia), mostradas como referencias; la aplicación no las consulta ni ejecuta.
-
-La implementación del proyecto real deberá sustituir los fixtures por una recolección autorizada, normalización de evidencias y consultas verificables a fuentes oficiales.
+- No se utiliza `shell=True`.
+- No se utiliza `sudo`.
+- Solo se aceptan comandos exactos incluidos en una allowlist.
+- No se reciben comandos desde HTTP ni desde el usuario.
+- La salida cruda de los comandos no se conserva en la traza.
+- El módulo no modifica el servidor.
+- La evaluación de vulnerabilidad sigue siendo simulada y está marcada como no operativa.

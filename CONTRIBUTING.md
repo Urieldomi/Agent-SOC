@@ -5,7 +5,7 @@ Todo cambio en Agent SOC debe cumplir estas reglas:
 ## Código
 
 - Usar nombres claros y descriptivos en inglés.
-- Variables y funciones: `camelCase`.
+- Variables y funciones Python: `snake_case` (PEP 8).
 - Clases y tipos: `PascalCase`.
 - Constantes y variables de entorno: `UPPER_SNAKE_CASE`.
 - Evitar nombres ambiguos como `data`, `temp`, `value` o `x`.
@@ -34,3 +34,6 @@ Todo cambio en Agent SOC debe cumplir estas reglas:
 - Cada cambio debe tener un objetivo claro e incluir las pruebas necesarias.
 - No integrar código con pruebas fallidas o hallazgos críticos pendientes.
 - Explicar en cada solicitud de cambio qué se modificó y cómo se validó.
+- Mantener operativo el flujo completo durante la migración de mocks a módulos reales.
+- Sustituir cada mock detrás de un contrato compatible o agregar un adaptador de transición.
+- Identificar de forma visible qué datos son reales y cuáles siguen siendo simulados.
