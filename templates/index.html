@@ -15,7 +15,7 @@
       </a>
       <div class="header-meta">
         <span class="case-id">CASO {{ cve }}</span>
-        <span class="live-badge"><span aria-hidden="true"></span> ENTORNO DE DEMOSTRACIÓN</span>
+        <span class="live-badge"><span aria-hidden="true"></span> SISTEMA ACTIVO</span>
       </div>
     </div>
   </header>
@@ -73,11 +73,247 @@
       <div class="case-strip">
         <div><span class="strip-label">HOST SELECCIONADO</span><strong>{{ inventory.hostname }}</strong><small>{{ inventory.operating_system.pretty_name }}</small></div>
         <div><span class="strip-label">IP PRINCIPAL</span><strong>{{ inventory.default_gateway.source_address or 'No detectada' }}</strong><small>Dato real del inventario</small></div>
-        <div><span class="strip-label">KERNEL ACTIVO</span><strong>{{ inventory.kernel.release }}</strong><small>Dato real del sistema</small></div>
+        <div><span class="strip-label">KERNEL ACTIVO</span><strong>{{ inspection.summary.facts.kernel if inspection and inspection.summary else inventory.kernel.release }}</strong><small>Evidencia de la inspección</small></div>
         <form action="{{ url_for('restart_flow') }}" method="post"><button type="submit" class="plain-button">Cambiar servidor</button></form>
       </div>
 
-      {% if not payload %}
+      {% if current_stage == 1 %}
+        <section class="inspection-workbench">
+          <div class="command-panel">
+            <div class="workbench-heading">
+              <span class="section-label">SECUENCIA DE INSPECCIÓN</span>
+              <h2>Comandos de diagnóstico</h2>
+              <p>Ejecute cada comprobación en orden para construir el dictamen.</p>
+            </div>
+            <div class="command-list">
+              {% for command in inspection.commands %}
+                <div class="command-item {{ 'is-complete' if command.completed else 'is-active' if command.available else 'is-locked' }}">
+                  <span class="command-number">{{ '✓' if command.completed else '%02d'|format(loop.index) }}</span>
+                  <div><strong>{{ command.title }}</strong><code>{{ command.display_command }}</code></div>
+                  {% if command.available %}
+                    <form action="{{ url_for('execute_inspection_command', command_id=command.command_id) }}" method="post"><button type="submit" aria-label="Ejecutar {{ command.title }}">Ejecutar</button></form>
+                  {% elif command.completed %}
+                    <span class="command-state">LISTO</span>
+                  {% else %}
+                    <span class="command-state">—</span>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="terminal-panel">
+            <div class="terminal-toolbar"><span></span><span></span><span></span><strong>agent-soc@{{ inventory.hostname }}</strong></div>
+            <div class="terminal-output" aria-live="polite">
+              {% if inspection.executions %}
+                {% for execution in inspection.executions %}
+                  <div class="terminal-entry">
+                    <div class="terminal-prompt"><span>agent-soc@{{ inventory.hostname }}:~$</span> {{ execution.display_command }}</div>
+                    <pre>{{ execution.output }}</pre>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="terminal-entry terminal-ready"><span>agent-soc@{{ inventory.hostname }}:~$</span><span class="cursor" aria-hidden="true"></span><p>Terminal preparada. Ejecute el primer comando.</p></div>
+              {% endif %}
+            </div>
+          </div>
+        </section>
+
+        {% if inspection.summary %}
+          <section class="inspection-summary tone-{{ inspection.summary.tone }}">
+            <div class="summary-mark">{{ '✓' if inspection.summary.status == 'CORRECTED' else '!' }}</div>
+            <div class="summary-copy"><span class="section-label">DICTAMEN DE INSPECCIÓN</span><h2>{{ inspection.summary.result }}</h2><p>{{ inspection.summary.reason }}</p></div>
+            <dl class="summary-facts">
+              <div><dt>Kernel evaluado</dt><dd>{{ inspection.summary.facts.kernel }}</dd></div>
+              <div><dt>Paquete origen</dt><dd>{{ inspection.summary.facts.source_package }}</dd></div>
+              <div><dt>Versión instalada</dt><dd>{{ inspection.summary.facts.installed_version }}</dd></div>
+              <div><dt>Versión corregida</dt><dd>{{ inspection.summary.facts.fixed_version }}</dd></div>
+            </dl>
+          </section>
+          <div class="action-bar"><div><span class="section-label">ETAPA 01 COMPLETADA</span><p>La evidencia quedó consolidada para la siguiente etapa.</p></div><a class="primary-button" href="{{ url_for('stage_view', stage=2) }}">Continuar a contexto <span aria-hidden="true">→</span></a></div>
+        {% endif %}
+      {% elif current_stage == 2 %}
+        <section class="context-progress" aria-label="Progreso del análisis contextual">
+          <div><span class="section-label">PROGRESO DEL PIPELINE</span><strong>{{ context.progress }} %</strong></div>
+          <div class="progress-track"><span style="width: {{ context.progress }}%"></span></div>
+          <small>{{ context.executions|length }} de {{ context.operations|length }} operaciones completadas</small>
+        </section>
+
+        {% if context.error %}<div class="context-error"><strong>No se completó la operación.</strong><span>{{ context.error }}</span><small>Puede ejecutarla nuevamente.</small></div>{% endif %}
+
+        <section class="inspection-workbench context-workbench">
+          <div class="command-panel">
+            <div class="workbench-heading">
+              <span class="section-label">ANÁLISIS DE CONTEXTO</span>
+              <h2>Dataset, RAG y agentes</h2>
+              <p>Prepare y correlacione la evidencia utilizando las fuentes vinculadas.</p>
+            </div>
+            <div class="command-list">
+              {% for operation in context.operations %}
+                <div class="command-item {{ 'is-complete' if operation.completed else 'is-active' if operation.available else 'is-locked' }}">
+                  <span class="command-number">{{ '✓' if operation.completed else '%02d'|format(loop.index) }}</span>
+                  <div><strong>{{ operation.title }}</strong><code>{{ operation.action }}</code></div>
+                  {% if operation.available %}
+                    <form class="context-operation-form" action="{{ url_for('execute_context_operation', operation_id=operation.operation_id) }}" method="post" data-operation-id="{{ operation.operation_id }}" data-operation-title="{{ operation.title }}" data-operation-action="{{ operation.action }}"><button type="submit" aria-label="Ejecutar {{ operation.title }}"><span>Ejecutar</span></button></form>
+                  {% elif operation.completed %}
+                    <span class="command-state">LISTO</span>
+                  {% else %}
+                    <span class="command-state">—</span>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="terminal-panel context-terminal">
+            <div class="terminal-toolbar"><span></span><span></span><span></span><strong>context-engine@{{ inventory.hostname }}</strong></div>
+            <div class="terminal-output" id="context-terminal-output" aria-live="polite">
+              {% if context.executions %}
+                {% for execution in context.executions %}
+                  <div class="terminal-entry">
+                    <div class="terminal-prompt"><span>[{{ '%02d'|format(loop.index) }}/{{ context.operations|length }}]</span> {{ execution.action }}</div>
+                    <pre>{{ execution.output }}</pre>
+                    <small class="terminal-duration">Completado en {{ execution.duration_ms }} ms</small>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="terminal-entry terminal-ready"><span>context-engine@{{ inventory.hostname }}:~$</span><span class="cursor" aria-hidden="true"></span><p>Motor preparado. Verifique el catálogo de fuentes.</p></div>
+              {% endif %}
+            </div>
+          </div>
+        </section>
+
+        {% if context.result %}
+          <section class="inspection-summary tone-{{ context.result.tone }}">
+            <div class="summary-mark">{{ '✓' if context.result.status == 'NOT_APPLICABLE' else '!' }}</div>
+            <div class="summary-copy"><span class="section-label">RESULTADO CONTEXTUAL</span><h2>{{ context.result.result }}</h2><p>{{ context.result.reason }}</p></div>
+            <dl class="summary-facts">
+              <div><dt>Confianza</dt><dd>{{ context.result.confidence }} %</dd></div>
+              <div><dt>CVSS</dt><dd>{{ context.result.facts.cvss_score }}</dd></div>
+              <div><dt>Documentos</dt><dd>{{ context.result.facts.documents }}</dd></div>
+              <div><dt>Fragmentos RAG</dt><dd>{{ context.result.facts.chunks }}</dd></div>
+            </dl>
+          </section>
+
+          <section class="context-explanation">
+            <span class="section-label">CORRELACIÓN DEL HALLAZGO</span>
+            <h2>Explicación del agente analista</h2>
+            <p>{{ context.result.explanation }}</p>
+          </section>
+
+          <section class="references context-sources">
+            <span class="section-label">FUENTES VINCULADAS</span><h2>Evidencia consultada</h2>
+            <div class="reference-list">
+              {% for source in context.result.sources %}
+                <a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>
+              {% endfor %}
+            </div>
+          </section>
+
+          <section class="retrieval-panel">
+            <span class="section-label">RECUPERACIÓN RAG</span><h2>Coincidencias utilizadas</h2>
+            <div class="retrieval-list">
+              {% for match in context.result.retrieved %}
+                <a href="{{ match.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ match.source }}</strong><span>{{ match.title }}</span><code>{{ '%.4f'|format(match.score) }}</code></a>
+              {% endfor %}
+            </div>
+          </section>
+
+          <div class="action-bar"><div><span class="section-label">ETAPA 02 COMPLETADA</span><p>El resultado contextual quedó disponible para el reporte.</p></div><a class="primary-button" href="{{ url_for('stage_view', stage=3) }}">Continuar a reporte <span aria-hidden="true">→</span></a></div>
+        {% endif %}
+      {% elif current_stage == 3 %}
+        <section class="context-progress report-progress" aria-label="Progreso de generación del reporte">
+          <div><span class="section-label">PROGRESO DOCUMENTAL</span><strong>{{ report.progress }} %</strong></div>
+          <div class="progress-track"><span style="width: {{ report.progress }}%"></span></div>
+          <small>{{ report.executions|length }} de {{ report.operations|length }} controles completados</small>
+        </section>
+
+        {% if report.error %}<div class="context-error"><strong>No se completó la operación.</strong><span>{{ report.error }}</span><small>Puede ejecutarla nuevamente.</small></div>{% endif %}
+
+        {% if not report.result %}
+          <section class="inspection-workbench report-workbench">
+            <div class="command-panel">
+              <div class="workbench-heading">
+                <span class="section-label">AGENTE DOCUMENTADOR</span>
+                <h2>Producción del dictamen</h2>
+                <p>Consolide, redacte y verifique el expediente antes de publicarlo.</p>
+              </div>
+              <div class="command-list">
+                {% for operation in report.operations %}
+                  <div class="command-item {{ 'is-complete' if operation.completed else 'is-active' if operation.available else 'is-locked' }}">
+                    <span class="command-number">{{ '✓' if operation.completed else '%02d'|format(loop.index) }}</span>
+                    <div><strong>{{ operation.title }}</strong><code>{{ operation.action }}</code></div>
+                    {% if operation.available %}
+                      <form class="report-operation-form" action="{{ url_for('execute_report_operation', operation_id=operation.operation_id) }}" method="post" data-operation-id="{{ operation.operation_id }}" data-operation-title="{{ operation.title }}" data-operation-action="{{ operation.action }}"><button type="submit"><span>Ejecutar</span></button></form>
+                    {% elif operation.completed %}<span class="command-state">LISTO</span>{% else %}<span class="command-state">—</span>{% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="terminal-panel context-terminal">
+              <div class="terminal-toolbar"><span></span><span></span><span></span><strong>documenter@{{ inventory.hostname }}</strong></div>
+              <div class="terminal-output" id="report-terminal-output" aria-live="polite">
+                {% if report.executions %}
+                  {% for execution in report.executions %}
+                    <div class="terminal-entry"><div class="terminal-prompt"><span>[{{ '%02d'|format(loop.index) }}/{{ report.operations|length }}]</span> {{ execution.action }}</div><pre>{{ execution.output }}</pre><small class="terminal-duration">Completado en {{ execution.duration_ms }} ms</small></div>
+                  {% endfor %}
+                {% else %}
+                  <div class="terminal-entry terminal-ready"><span>documenter@{{ inventory.hostname }}:~$</span><span class="cursor" aria-hidden="true"></span><p>Expediente preparado. Inicie la consolidación de evidencia.</p></div>
+                {% endif %}
+              </div>
+            </div>
+          </section>
+        {% else %}
+          {% set final = report.result %}
+          <section class="report-commandbar">
+            <div><span class="section-label">{{ final.report_id }} · VERSIÓN {{ final.version }}</span><strong>{{ final.title }}</strong><small>Generado {{ final.generated_at }}</small></div>
+            <div class="report-exports"><a href="{{ url_for('report_json') }}">JSON</a><a href="{{ url_for('report_markdown') }}">Markdown</a><a class="primary-button" href="{{ url_for('report_pdf') }}">Descargar PDF ↓</a></div>
+          </section>
+
+          <section class="report-verdict tone-{{ final.priority_tone }}">
+            <div class="report-verdict-copy"><span class="section-label">DICTAMEN EJECUTIVO</span><h2>{{ final.classification }}</h2><p>{{ final.executive_summary }}</p></div>
+            <div class="report-score"><span>PRIORIDAD</span><strong>{{ final.priority }}</strong><small>{{ final.confidence }} % de confianza</small></div>
+          </section>
+
+          <section class="report-kpis" aria-label="Indicadores del reporte">
+            <article><span>Severidad CVSS</span><strong>{{ final.cvss_score }}</strong><small>{{ cve }}</small></article>
+            <article><span>Evidencia documental</span><strong>{{ final.rag.documents }}</strong><small>{{ final.rag.chunks }} fragmentos indexados</small></article>
+            <article><span>Coincidencias RAG</span><strong>{{ final.rag.retrieved }}</strong><small>{{ final.rag.embedding_model }}</small></article>
+            <article><span>Control humano</span><strong>{{ final.review.label }}</strong><small>{{ final.review.timestamp or 'Esperando decisión' }}</small></article>
+          </section>
+
+          <div class="report-grid">
+            <section class="report-card report-main">
+              <span class="section-label">ANÁLISIS TÉCNICO</span><h2>Aplicabilidad en el activo</h2><p>{{ final.technical_analysis }}</p>
+              <div class="report-callout"><strong>Fundamento verificable</strong><p>{{ final.reason }}</p></div>
+              <h3>Impacto para el entorno</h3><p>{{ final.impact_statement }}</p>
+              <h3>Plan de acción</h3><p>{{ final.action_plan }}</p>
+            </section>
+            <aside class="report-card asset-dossier">
+              <span class="section-label">ACTIVO EVALUADO</span><h2>{{ final.host.host }}</h2>
+              <dl><div><dt>Sistema</dt><dd>{{ final.host.os }}</dd></div><div><dt>Kernel</dt><dd>{{ final.host.kernel }}</dd></div><div><dt>Dirección IP</dt><dd>{{ final.host.ip }}</dd></div><div><dt>Paquete</dt><dd>{{ final.host.source_package }}</dd></div><div><dt>Instalada</dt><dd>{{ final.host.installed_version }}</dd></div><div><dt>Corregida</dt><dd>{{ final.host.fixed_version }}</dd></div></dl>
+            </aside>
+          </div>
+
+          <div class="report-grid traceability-grid">
+            <section class="report-card">
+              <span class="section-label">EVIDENCIA VERIFICADA</span><h2>Control de afirmaciones</h2>
+              <div class="claims-list">{% for item in final.verified_claims %}<div><span>✓</span><p><strong>{{ item.claim }}</strong><small>{{ item.evidence }}</small></p></div>{% endfor %}</div>
+            </section>
+            <section class="report-card">
+              <span class="section-label">PLN, IA Y RECUPERACIÓN</span><h2>Trazabilidad del pipeline</h2>
+              <dl class="model-trace"><div><dt>Procesamiento de lenguaje</dt><dd>{{ final.models.nlp_pipeline }}</dd></div><div><dt>Modelo de lenguaje</dt><dd>{{ final.models.language_model }}</dd></div><div><dt>Agente documentador</dt><dd>{{ final.models.documenter_model }}</dd></div><div><dt>Modelo de embeddings</dt><dd>{{ final.rag.embedding_model }}</dd></div><div><dt>Tokens entrada / salida</dt><dd>{{ final.models.prompt_tokens }} / {{ final.models.response_tokens }}</dd></div><div><dt>Tiempo de inferencia</dt><dd>{{ final.models.duration_ms }} ms</dd></div><div><dt>Afirmaciones sin respaldo</dt><dd>{{ final.unverified_claims|length }}</dd></div></dl>
+            </section>
+          </div>
+
+          <section class="references report-sources"><span class="section-label">FUENTES Y PROCEDENCIA</span><h2>Evidencia vinculada al dictamen</h2><div class="reference-list">{% for source in final.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}{% if source.category_label %}<em>{{ source.category_label }}</em>{% endif %}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div></section>
+
+          <section class="review-panel" id="revision-analista">
+            <div class="review-copy"><span class="section-label">CONTROL HUMANO · HITL</span><h2>Decisión del analista</h2><p>Registre la aceptación o el rechazo del dictamen. La decisión queda vinculada al análisis y su marca de tiempo.</p>{% if final.review.status != 'PENDING' %}<div class="review-status is-{{ final.review.status|lower }}"><strong>{{ final.review.label }}</strong><span>{{ final.review.timestamp }}</span>{% if final.review.notes %}<p>{{ final.review.notes }}</p>{% endif %}</div>{% endif %}</div>
+            <form action="{{ url_for('review_report') }}" method="post"><label for="analyst-notes">Notas del analista</label><textarea id="analyst-notes" name="notes" rows="4" placeholder="Añada observaciones, condiciones o fundamento de la decisión.">{{ final.review.notes }}</textarea><div><button class="reject-button" type="submit" name="decision" value="REJECTED">Rechazar dictamen</button><button class="primary-button" type="submit" name="decision" value="VALIDATED">Validar dictamen</button></div></form>
+          </section>
+        {% endif %}
+      {% elif not payload %}
         <section class="pending-card">
           <span class="pending-number">{{ '%02d'|format(current_stage) }}</span>
           <div>
@@ -97,7 +333,7 @@
           <section class="log-panel"><div class="panel-heading"><span class="section-label">TRAZABILIDAD</span><h2>Registro de la etapa</h2></div><div class="log-list">{% for line in payload.logs %}<div>{{ line }}</div>{% endfor %}</div><p>Registro técnico de la ejecución.</p></section>
         </div>
 
-        {% if payload.finding %}<section class="finding-panel"><span class="section-label">INTERPRETACIÓN DEL CASO</span><h2>{{ 'Conclusión de contexto' if current_stage == 2 else 'Conclusión del reporte' }}</h2><p>{{ payload.finding }}</p>{% if current_stage == 3 %}<strong>Acción sugerida</strong><p>{{ mock_assessment.recommendation }}</p>{% endif %}</section>{% endif %}
+        {% if payload.finding %}<section class="finding-panel"><span class="section-label">INTERPRETACIÓN DEL CASO</span><h2>{{ 'Conclusión de contexto' if current_stage == 2 else 'Conclusión del reporte' }}</h2><p>{{ payload.finding }}</p>{% if current_stage == 3 %}<strong>Acción sugerida</strong><p>{{ payload.recommendation }}</p>{% endif %}</section>{% endif %}
 
         {% if current_stage == 2 %}<section class="references"><span class="section-label">REFERENCIAS TÉCNICAS</span><h2>Fuentes vinculadas al caso</h2><div class="reference-list">{% for source in payload.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ source.name }}</strong><span>{{ source.detail }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div></section>{% endif %}
 
@@ -105,7 +341,174 @@
       {% endif %}
     {% endif %}
 
-    <footer>Agent SOC · Evaluación de exposición · {{ cve }}</footer>
+    <footer>
+      <span>Agent SOC · Evaluación de exposición · {{ cve }}</span>
+      <form action="{{ url_for('toggle_test_mode') }}" method="post">
+        <button class="mode-switch {{ 'is-on' if vulnerable_mode else '' }}" type="submit" aria-pressed="{{ 'true' if vulnerable_mode else 'false' }}" aria-label="Alternar escenario de inspección">
+          <span class="switch-track"><span></span></span>{{ 'Desactivar' if vulnerable_mode else 'Activar' }}
+        </button>
+      </form>
+    </footer>
   </main>
+  {% if page == 'stage' and current_stage == 2 %}
+    <script>
+      (() => {
+        const terminal = document.getElementById('context-terminal-output');
+        const forms = document.querySelectorAll('.context-operation-form');
+        if (!terminal || !forms.length) return;
+
+        const messages = {
+          sources: ['Leyendo configuración de fuentes', 'Verificando endpoints autorizados', 'Preparando catálogo técnico'],
+          download: ['Abriendo conexiones HTTPS', 'Transfiriendo registros oficiales', 'Calculando hashes SHA-256', 'Verificando archivos recibidos'],
+          normalize: ['Analizando documentos JSON', 'Extrayendo paquetes y versiones', 'Actualizando esquema normalizado', 'Guardando registros en SQLite'],
+          index: ['Cargando modelo de embeddings', 'Fragmentando documentos técnicos', 'Generando representaciones vectoriales', 'Construyendo índice de conocimiento'],
+          retrieve: ['Construyendo consulta desde el host', 'Calculando similitud vectorial', 'Ordenando evidencia relevante'],
+          triage: ['Cargando modelo de lenguaje local', 'Enviando evidencia al agente de triaje', 'Procesando respuesta estructurada'],
+          analyze: ['Preparando contexto recuperado', 'Ejecutando agente correlacionador', 'Relacionando hallazgo y fuentes'],
+          validate: ['Contrastando versiones', 'Verificando referencias y conclusiones', 'Consolidando resultado contextual']
+        };
+        const phaseIntervals = {
+          sources: 900,
+          download: 2200,
+          normalize: 1500,
+          index: 2600,
+          retrieve: 1300,
+          triage: 3500,
+          analyze: 3500,
+          validate: 1200
+        };
+
+        forms.forEach((form) => form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (form.dataset.running === 'true') return;
+          form.dataset.running = 'true';
+          const button = form.querySelector('button');
+          const buttonLabel = button.querySelector('span');
+          const operationId = form.dataset.operationId;
+          const phases = messages[operationId] || ['Procesando operación'];
+          document.querySelectorAll('.context-operation-form button').forEach((item) => item.disabled = true);
+          button.classList.add('is-running');
+          buttonLabel.textContent = 'Procesando';
+
+          const entry = document.createElement('div');
+          entry.className = 'terminal-entry terminal-running';
+          entry.innerHTML = `
+            <div class="terminal-prompt"><span>[EN CURSO]</span> ${form.dataset.operationAction}</div>
+            <div class="activity-progress"><span></span></div>
+            <pre class="live-activity"></pre>
+            <small class="terminal-duration live-elapsed">Tiempo transcurrido: 0 s</small>`;
+          terminal.appendChild(entry);
+          terminal.scrollTop = terminal.scrollHeight;
+          const activity = entry.querySelector('.live-activity');
+          const elapsedLabel = entry.querySelector('.live-elapsed');
+          const started = Date.now();
+          let phase = 0;
+
+          const render = () => {
+            const elapsed = Math.floor((Date.now() - started) / 1000);
+            const visible = phases.slice(0, Math.min(phase + 1, phases.length));
+            activity.textContent = visible.map((message, index) => `${index < phase ? 'OK ' : '…  '} ${message}`).join('\n');
+            elapsedLabel.textContent = `Tiempo transcurrido: ${elapsed} s`;
+            terminal.scrollTop = terminal.scrollHeight;
+          };
+          render();
+          const timer = window.setInterval(() => {
+            if (phase < phases.length - 1) phase += 1;
+            render();
+          }, phaseIntervals[operationId] || 1800);
+          const controller = new AbortController();
+          const requestTimeout = window.setTimeout(() => controller.abort(), 58000);
+
+          try {
+            const response = await fetch(form.action, {
+              method: 'POST', credentials: 'same-origin', signal: controller.signal,
+              headers: {'X-Requested-With': 'fetch'}
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            window.clearInterval(timer);
+            window.clearTimeout(requestTimeout);
+            phase = phases.length;
+            activity.textContent = phases.map((message) => `OK  ${message}`).join('\n') + '\nOK  Operación completada';
+            elapsedLabel.textContent = `Completado en ${((Date.now() - started) / 1000).toFixed(1)} s`;
+            window.setTimeout(() => window.location.assign(response.url), 350);
+          } catch (error) {
+            window.clearInterval(timer);
+            window.clearTimeout(requestTimeout);
+            const message = error.name === 'AbortError' ? 'La actividad alcanzó el límite de 58 segundos' : error.message;
+            activity.textContent += `\nERROR ${message}`;
+            elapsedLabel.textContent = 'La operación puede ejecutarse nuevamente.';
+            button.classList.remove('is-running');
+            buttonLabel.textContent = 'Reintentar';
+            document.querySelectorAll('.context-operation-form button').forEach((item) => item.disabled = false);
+            form.dataset.running = 'false';
+          }
+        }));
+      })();
+    </script>
+  {% endif %}
+  {% if page == 'stage' and current_stage == 3 and not report.result %}
+    <script>
+      (() => {
+        const terminal = document.getElementById('report-terminal-output');
+        const forms = document.querySelectorAll('.report-operation-form');
+        if (!terminal || !forms.length) return;
+        const messages = {
+          consolidate: ['Leyendo inventario del activo', 'Incorporando dictamen de inspección', 'Vinculando evidencia contextual', 'Validando el esquema del expediente'],
+          document: ['Cargando modelo de lenguaje local', 'Preparando contexto verificable', 'Aplicando procesamiento de lenguaje natural', 'Redactando resumen ejecutivo', 'Construyendo análisis y plan de acción'],
+          verify: ['Extrayendo afirmaciones técnicas', 'Contrastando versiones y clasificación', 'Validando procedencia de fuentes', 'Aplicando compuerta de publicación'],
+          publish: ['Asignando identificador y versión', 'Generando representaciones PDF, Markdown y JSON', 'Registrando auditoría en SQLite', 'Preparando control humano']
+        };
+        const intervals = {consolidate: 1100, document: 3200, verify: 1500, publish: 1300};
+        forms.forEach((form) => form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (form.dataset.running === 'true') return;
+          form.dataset.running = 'true';
+          const operationId = form.dataset.operationId;
+          const phases = messages[operationId] || ['Procesando expediente'];
+          const button = form.querySelector('button');
+          const label = button.querySelector('span');
+          document.querySelectorAll('.report-operation-form button').forEach((item) => item.disabled = true);
+          button.classList.add('is-running');
+          label.textContent = 'Procesando';
+          const entry = document.createElement('div');
+          entry.className = 'terminal-entry terminal-running';
+          entry.innerHTML = `<div class="terminal-prompt"><span>[EN CURSO]</span> ${form.dataset.operationAction}</div><div class="activity-progress"><span></span></div><pre class="live-activity"></pre><small class="terminal-duration live-elapsed">Tiempo transcurrido: 0 s</small>`;
+          terminal.appendChild(entry);
+          const activity = entry.querySelector('.live-activity');
+          const elapsedLabel = entry.querySelector('.live-elapsed');
+          const started = Date.now();
+          let phase = 0;
+          const render = () => {
+            const visible = phases.slice(0, Math.min(phase + 1, phases.length));
+            activity.textContent = visible.map((message, index) => `${index < phase ? 'OK ' : '…  '} ${message}`).join('\n');
+            elapsedLabel.textContent = `Tiempo transcurrido: ${Math.floor((Date.now() - started) / 1000)} s`;
+            terminal.scrollTop = terminal.scrollHeight;
+          };
+          render();
+          const timer = window.setInterval(() => { if (phase < phases.length - 1) phase += 1; render(); }, intervals[operationId] || 1700);
+          const controller = new AbortController();
+          const requestTimeout = window.setTimeout(() => controller.abort(), 58000);
+          try {
+            const response = await fetch(form.action, {method: 'POST', credentials: 'same-origin', signal: controller.signal, headers: {'X-Requested-With': 'fetch'}});
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            window.clearInterval(timer);
+            window.clearTimeout(requestTimeout);
+            activity.textContent = phases.map((message) => `OK  ${message}`).join('\n') + '\nOK  Control completado';
+            elapsedLabel.textContent = `Completado en ${((Date.now() - started) / 1000).toFixed(1)} s`;
+            window.setTimeout(() => window.location.assign(response.url), 350);
+          } catch (error) {
+            window.clearInterval(timer);
+            window.clearTimeout(requestTimeout);
+            activity.textContent += `\nERROR ${error.name === 'AbortError' ? 'La actividad alcanzó el límite de 58 segundos' : error.message}`;
+            elapsedLabel.textContent = 'La operación puede ejecutarse nuevamente.';
+            button.classList.remove('is-running');
+            label.textContent = 'Reintentar';
+            document.querySelectorAll('.report-operation-form button').forEach((item) => item.disabled = false);
+            form.dataset.running = 'false';
+          }
+        }));
+      })();
+    </script>
+  {% endif %}
 </body>
 </html>

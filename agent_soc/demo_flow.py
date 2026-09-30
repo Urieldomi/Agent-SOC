@@ -41,7 +41,13 @@ MOCK_ASSESSMENT = {
 }
 
 
-def build_stage_payload(stage: int, inventory: dict[str, Any]) -> dict[str, Any]:
+def build_stage_payload(
+    stage: int,
+    inventory: dict[str, Any],
+    vulnerability_summary: dict[str, Any] | None = None,
+    context_summary: dict[str, Any] | None = None,
+    report_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a real inspection stage followed by explicit transitional mocks."""
     if stage == 1:
         return {
@@ -71,7 +77,47 @@ def build_stage_payload(stage: int, inventory: dict[str, Any]) -> dict[str, Any]
             ],
         }
 
+    assessment = context_summary or vulnerability_summary or {
+        "result": MOCK_ASSESSMENT["decision"],
+        "reason": MOCK_ASSESSMENT["reason"],
+        "tone": MOCK_ASSESSMENT["tone"],
+        "status": "POTENTIALLY_VULNERABLE",
+    }
+    recommendation = (
+        "Mantener el kernel actualizado y conservar la evidencia del análisis."
+        if assessment["status"] in {"CORRECTED", "NOT_APPLICABLE"}
+        else MOCK_ASSESSMENT["recommendation"]
+    )
+
     if stage == 2:
+        if context_summary:
+            context_facts = context_summary["facts"]
+            return {
+                "number": 2,
+                "agent": "Agente de contexto",
+                "status": "Contexto verificado",
+                "summary": context_summary["result"],
+                "mode": "real",
+                "facts": [
+                    ["Caso", context_summary["cve_id"]],
+                    ["Host de entrada", inventory["hostname"]],
+                    ["Resultado", context_summary["result"]],
+                    ["Confianza", f"{context_summary['confidence']} %"],
+                    ["CVSS", context_facts.get("cvss_score") or "No disponible"],
+                    ["Documentos", context_facts["documents"]],
+                    ["Fragmentos RAG", context_facts["chunks"]],
+                    ["Modelo", context_facts["language_model"]],
+                ],
+                "logs": [
+                    f"DATA  {context_facts['documents']} documentos normalizados",
+                    f"RAG   {context_facts['chunks']} fragmentos indexados",
+                    f"MODEL {context_facts['language_model']}",
+                    f"RESULT {context_summary['status']}",
+                ],
+                "sources": context_summary["sources"],
+                "finding": context_summary["explanation"],
+                "tone": context_summary["tone"],
+            }
         return {
             "number": 2,
             "agent": "Agente de contexto",
@@ -81,7 +127,7 @@ def build_stage_payload(stage: int, inventory: dict[str, Any]) -> dict[str, Any]
             "facts": [
                 ["Caso", CVE],
                 ["Host de entrada", inventory["hostname"]],
-                ["Resultado", MOCK_ASSESSMENT["decision"]],
+                ["Resultado", assessment["result"]],
                 ["Score", MOCK_ASSESSMENT["score"]],
                 ["Confianza", MOCK_ASSESSMENT["confidence"]],
                 ["Impacto", "Escalada local de privilegios"],
@@ -90,13 +136,39 @@ def build_stage_payload(stage: int, inventory: dict[str, Any]) -> dict[str, Any]
                 "DATA  Cargando dataset local: fragnesia-demo-v1",
                 f"MATCH Asociando {CVE} con el inventario del host",
                 "RULE  Evaluando kernel y componentes relacionados",
-                f"RESULT {MOCK_ASSESSMENT['decision']}",
+                f"RESULT {assessment['result']}",
             ],
             "sources": SOURCES,
-            "finding": MOCK_ASSESSMENT["reason"],
+            "finding": assessment["reason"],
+            "tone": assessment["tone"],
         }
 
     if stage == 3:
+        if report_summary:
+            return {
+                "number": 3,
+                "agent": "Agente documentador",
+                "status": "Reporte técnico publicado",
+                "summary": report_summary["executive_summary"],
+                "mode": "real",
+                "facts": [
+                    ["Reporte", report_summary["report_id"]],
+                    ["Host", report_summary["host"]["host"]],
+                    ["Clasificación", report_summary["classification"]],
+                    ["Prioridad", report_summary["priority"]],
+                    ["Confianza", f"{report_summary['confidence']} %"],
+                    ["Revisión", report_summary["review"]["label"]],
+                ],
+                "logs": [
+                    f"REPORT {report_summary['report_id']}",
+                    f"MODEL {report_summary['models']['documenter_model']}",
+                    f"CLAIMS {len(report_summary['verified_claims'])} verificadas",
+                    f"HITL {report_summary['review']['status']}",
+                ],
+                "finding": report_summary["technical_analysis"],
+                "recommendation": report_summary["action_plan"],
+                "tone": report_summary["priority_tone"],
+            }
         return {
             "number": 3,
             "agent": "Agente de reporte",
@@ -105,16 +177,18 @@ def build_stage_payload(stage: int, inventory: dict[str, Any]) -> dict[str, Any]
             "mode": "mock",
             "facts": [
                 ["Host real", inventory["hostname"]],
-                ["Clasificación", MOCK_ASSESSMENT["decision"]],
-                ["Hallazgo", MOCK_ASSESSMENT["reason"]],
-                ["Siguiente acción", MOCK_ASSESSMENT["recommendation"]],
+                ["Clasificación", assessment["result"]],
+                ["Hallazgo", assessment["reason"]],
+                ["Siguiente acción", recommendation],
             ],
             "logs": [
                 "REPORT Incorporando inventario del servidor",
                 "REPORT Consolidando la evaluación de Fragnesia",
                 "REPORT Documento técnico listo para descarga",
             ],
-            "finding": MOCK_ASSESSMENT["reason"],
+            "finding": assessment["reason"],
+            "recommendation": recommendation,
+            "tone": assessment["tone"],
         }
 
     raise ValueError(f"Unsupported stage: {stage}")
